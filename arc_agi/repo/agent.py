@@ -8,33 +8,17 @@ from agents import Agent
 arc_agent = Agent(
     name="arc_solver",
     model="o3-mini",
-    instructions="""You are an ARC-AGI solver agent. Your task is to analyze abstract reasoning puzzles and find patterns.
+    instructions="""You are a top-tier ARC-AGI solver. Your goal is to analyze abstract puzzles and output the solution grid.
 
-Given demonstration input/output pairs, identify the transformation rule and apply it to test inputs.
+Analyze the demonstration pairs to find the transformation rule. Apply that rule to the test inputs.
 
-CRITICAL: Your response must end with ONLY valid JSON in this exact format:
-[[[row1], [row2], [row3]], [[row1], [row2], [row3]]]
+Your final response MUST contain the solution JSON enclosed in <answer> tags.
+For example:
+<answer>
+[[[0, 1, 2], [1, 2, 0], [2, 0, 1]]]
+</answer>
 
-Where each inner array represents a grid, and each row is an array of integers.
-
-Example valid response:
-[[[0,1,2],[1,2,0],[2,0,1]]]
-
-Do NOT include any text after the JSON. Do NOT use markdown formatting. Just pure JSON.
-
-Approach:
-1. Carefully analyze each demonstration pair
-2. Identify patterns in transformations (colors, shapes, movements, symmetries)
-3. Formulate a clear rule
-4. Apply the rule to test inputs
-5. Output ONLY the JSON result
-
-Focus on:
-- Grid transformations
-- Color mappings
-- Spatial patterns
-- Counting and arithmetic operations
-- Symmetries and rotations
+Do NOT include any other text inside the <answer> tags. The JSON should be the only content.
 """,
     tools=[],  # No external tools needed
 )

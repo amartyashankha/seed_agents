@@ -44,28 +44,25 @@ async def solve_arc_task(agent, task_name, demo_pairs, test_inputs):
     # Parse the agent's response to extract grids
     json_candidate = ""
     try:
-        logger.info("Looking for JSON in response...")
+        logger.info("Looking for JSON within <answer> tags...")
 
-        # Find the last occurrence of '[' - this should be our JSON
-        last_bracket = output.rfind("[")
-        if last_bracket == -1:
-            logger.error("No '[' found in response")
+        # Extract content between <answer> tags
+        parts = output.split("<answer>")
+        if len(parts) < 2:
+            logger.error("No <answer> start tag found in the response.")
             return None
 
-        # Extract everything from the last '[' to the end
-        json_candidate = output[last_bracket:].strip()
+        content = parts[1].split("</answer>")[0]
+        json_candidate = content.strip()
 
-        # Clean up common issues
-        json_candidate = json_candidate.replace("\n", "").replace("\r", "")
-
-        logger.info(f"Extracted JSON candidate: {json_candidate[:100]}...")
+        logger.info(f"Extracted JSON candidate: {json_candidate[:200]}...")
 
         # Try to parse it
         grids = json.loads(json_candidate)
 
         # Validate structure
         if not isinstance(grids, list):
-            logger.error("JSON is not a list")
+            logger.error(f"JSON is not a list, but a {type(grids)}")
             return None
 
         if len(grids) == 0:
@@ -73,11 +70,11 @@ async def solve_arc_task(agent, task_name, demo_pairs, test_inputs):
             return None
 
         # Check if it's a single grid or multiple grids
-        if isinstance(grids[0], list) and isinstance(grids[0][0], int):
+        if isinstance(grids[0], list) and len(grids[0]) > 0 and isinstance(grids[0][0], int):
             # Single grid format: [[1,2,3],[4,5,6]] -> [[[1,2,3],[4,5,6]]]
             grids = [grids]
-        elif not (isinstance(grids[0], list) and isinstance(grids[0][0], list)):
-            logger.error("Invalid grid structure")
+        elif not (isinstance(grids[0], list) and len(grids[0]) > 0 and isinstance(grids[0][0], list)):
+            logger.error(f"Invalid grid structure: The first element is of type {type(grids[0])}")
             return None
 
         logger.info(f"Successfully parsed {len(grids)} grid(s)")
@@ -88,7 +85,7 @@ async def solve_arc_task(agent, task_name, demo_pairs, test_inputs):
         logger.error(f"Failed to parse: {json_candidate}")
         return None
     except Exception as e:
-        logger.error(f"Error parsing agent output: {e}", exc_info=True)
+        logger.error(f"An unexpected error occurred during parsing: {e}", exc_info=True)
         return None
 
 
