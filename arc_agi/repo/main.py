@@ -6,7 +6,6 @@ import argparse
 import asyncio
 import json
 import logging
-import re
 import sys
 from pathlib import Path
 
@@ -43,41 +42,51 @@ async def solve_arc_task(agent, task_name, demo_pairs, test_inputs):
     logger.info(f"Raw LLM response (first 500 chars): {output[:500]}...")
 
     # Parse the agent's response to extract grids
+    json_candidate = ""
     try:
-        # Look for JSON array pattern
-        json_match = re.search(r"\[\s*\[.*?\]\s*\]", output, re.DOTALL)
-        if json_match:
-            json_str = json_match.group()
-            logger.info(f"Found JSON pattern: {json_str[:200]}...")
+        logger.info("Looking for JSON in response...")
 
-            try:
-                grids = json.loads(json_str)
-                if isinstance(grids, list) and len(grids) > 0 and isinstance(grids[0], list) and isinstance(grids[0][0], int):
-                    grids = [grids]
-                logger.info(f"Successfully parsed {len(grids)} grid(s) from agent output.")
-                return grids
-            except json.JSONDecodeError as json_err:
-                logger.error(f"JSON parsing failed: {json_err}")
-                logger.error(f"Problematic JSON string: {json_str}")
-
-                # Try to fix common JSON issues
-                fixed_json = json_str.replace("\n", "").replace("\r", "").strip()
-                # Remove trailing commas
-                fixed_json = re.sub(r",\s*([}\]])", r"\1", fixed_json)
-
-                try:
-                    grids = json.loads(fixed_json)
-                    if isinstance(grids, list) and len(grids) > 0 and isinstance(grids[0], list) and isinstance(grids[0][0], int):
-                        grids = [grids]
-                    logger.info(f"Successfully parsed {len(grids)} grid(s) after JSON cleanup.")
-                    return grids
-                except json.JSONDecodeError:
-                    logger.error("JSON cleanup failed, returning None")
-                    return None
-        else:
-            logger.error("No JSON array pattern found in agent output")
-            logger.error(f"Full output: {output}")
+        # Find the last occurrence of '[' - this should be our JSON
+        last_bracket = output.rfind("[")
+        if last_bracket == -1:
+            logger.error("No '[' found in response")
             return None
+
+        # Extract everything from the last '[' to the end
+        json_candidate = output[last_bracket:].strip()
+
+        # Clean up common issues
+        json_candidate = json_candidate.replace("\n", "").replace("\r", "")
+
+        logger.info(f"Extracted JSON candidate: {json_candidate[:100]}...")
+
+        # Try to parse it
+        grids = json.loads(json_candidate)
+
+        # Validate structure
+        if not isinstance(grids, list):
+            logger.error("JSON is not a list")
+            return None
+
+        if len(grids) == 0:
+            logger.error("JSON list is empty")
+            return None
+
+        # Check if it's a single grid or multiple grids
+        if isinstance(grids[0], list) and isinstance(grids[0][0], int):
+            # Single grid format: [[1,2,3],[4,5,6]] -> [[[1,2,3],[4,5,6]]]
+            grids = [grids]
+        elif not (isinstance(grids[0], list) and isinstance(grids[0][0], list)):
+            logger.error("Invalid grid structure")
+            return None
+
+        logger.info(f"Successfully parsed {len(grids)} grid(s)")
+        return grids
+
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON parsing failed: {e}")
+        logger.error(f"Failed to parse: {json_candidate}")
+        return None
     except Exception as e:
         logger.error(f"Error parsing agent output: {e}", exc_info=True)
         return None
