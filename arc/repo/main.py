@@ -12,8 +12,11 @@ from pathlib import Path
 
 from agent import get_arc_agent
 from agents import Runner
+from dotenv import load_dotenv
 from formatting import format_task_for_agent
 from task_utils import load_task_from_file
+
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(
