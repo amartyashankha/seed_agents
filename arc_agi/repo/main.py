@@ -39,19 +39,44 @@ async def solve_arc_task(agent, task_name, demo_pairs, test_inputs):
     result = await Runner.run(agent, prompt)
     output = result.final_output
     logger.info("Agent returned a response.")
-    logger.debug(f"Agent raw output:\n{output}")
+    logger.info(f"Raw LLM response length: {len(output)} characters")
+    logger.info(f"Raw LLM response (first 500 chars): {output[:500]}...")
 
     # Parse the agent's response to extract grids
     try:
+        # Look for JSON array pattern
         json_match = re.search(r"\[\s*\[.*?\]\s*\]", output, re.DOTALL)
         if json_match:
-            grids = json.loads(json_match.group())
-            if isinstance(grids, list) and len(grids) > 0 and isinstance(grids[0], list) and isinstance(grids[0][0], int):
-                grids = [grids]
-            logger.info(f"Successfully parsed {len(grids)} grid(s) from agent output.")
-            return grids
+            json_str = json_match.group()
+            logger.info(f"Found JSON pattern: {json_str[:200]}...")
+
+            try:
+                grids = json.loads(json_str)
+                if isinstance(grids, list) and len(grids) > 0 and isinstance(grids[0], list) and isinstance(grids[0][0], int):
+                    grids = [grids]
+                logger.info(f"Successfully parsed {len(grids)} grid(s) from agent output.")
+                return grids
+            except json.JSONDecodeError as json_err:
+                logger.error(f"JSON parsing failed: {json_err}")
+                logger.error(f"Problematic JSON string: {json_str}")
+
+                # Try to fix common JSON issues
+                fixed_json = json_str.replace("\n", "").replace("\r", "").strip()
+                # Remove trailing commas
+                fixed_json = re.sub(r",\s*([}\]])", r"\1", fixed_json)
+
+                try:
+                    grids = json.loads(fixed_json)
+                    if isinstance(grids, list) and len(grids) > 0 and isinstance(grids[0], list) and isinstance(grids[0][0], int):
+                        grids = [grids]
+                    logger.info(f"Successfully parsed {len(grids)} grid(s) after JSON cleanup.")
+                    return grids
+                except json.JSONDecodeError:
+                    logger.error("JSON cleanup failed, returning None")
+                    return None
         else:
-            logger.error(f"Failed to parse grids from agent output. Raw output (first 200 chars): {output[:200]}...")
+            logger.error("No JSON array pattern found in agent output")
+            logger.error(f"Full output: {output}")
             return None
     except Exception as e:
         logger.error(f"Error parsing agent output: {e}", exc_info=True)
