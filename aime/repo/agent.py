@@ -1,22 +1,23 @@
 """
-AIME Agent implementation using the agents library.
+AIME Agent implementation using OpenAI directly.
 """
 
-from agents import BasicGenerateAgent
+import os
+
+from dotenv import load_dotenv
+from openai import OpenAI
+
+# Load environment variables
+load_dotenv()
 
 
 def get_aime_agent():
     """Create and return an AIME problem-solving agent."""
 
-    # Create a comprehensive AIME solver agent
-    aime_agent = BasicGenerateAgent(
-        "AIME Solver",
-        generation_config={
-            "model": "gpt-4",
-            "temperature": 0.1,
-            "max_tokens": 2000,
-        },
-        system_prompt="""You are an expert mathematician specializing in AIME (American Invitational Mathematics Examination) problems.
+    class AIMEAgent:
+        def __init__(self):
+            self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            self.system_prompt = """You are an expert mathematician specializing in AIME (American Invitational Mathematics Examination) problems.
 
 CRITICAL: Your final answer MUST be a single integer between 0 and 999 (inclusive).
 
@@ -42,7 +43,19 @@ Remember:
 - Look for elegant solutions and patterns
 - The answer must be an integer from 0 to 999
 - Always verify your answer makes sense in the context of the problem
-""",
-    )
+"""
 
-    return aime_agent
+        def solve(self, problem):
+            """Solve an AIME problem and return the answer."""
+            try:
+                response = self.client.chat.completions.create(
+                    model="gpt-4",
+                    messages=[{"role": "system", "content": self.system_prompt}, {"role": "user", "content": problem}],
+                    temperature=0.1,
+                    max_tokens=2000,
+                )
+                return response.choices[0].message.content
+            except Exception as e:
+                return f"Error solving problem: {e!s}"
+
+    return AIMEAgent()

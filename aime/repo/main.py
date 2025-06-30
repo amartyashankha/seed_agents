@@ -3,7 +3,6 @@ Simple AIME Agent - Main entry point for solving AIME mathematics problems.
 """
 
 import argparse
-import asyncio
 import json
 import logging
 import re
@@ -11,7 +10,6 @@ import sys
 from pathlib import Path
 
 from agent import get_aime_agent
-from agents import Runner
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -55,15 +53,14 @@ def extract_answer(text):
     return None
 
 
-async def solve_aime_problem(agent, problem_text):
+def solve_aime_problem(agent, problem_text):
     """Solve a single AIME problem using the agent."""
     logger.info("Invoking agent for AIME problem")
     logger.info(f"Problem text length: {len(problem_text)} characters")
     logger.debug(f"Problem: {problem_text[:200]}...")
 
     # Run the agent
-    result = await Runner.run(agent, problem_text)
-    output = result.final_output
+    output = agent.solve(problem_text)
     logger.info("Agent returned a response.")
     logger.info(f"Raw LLM response length: {len(output)} characters")
     logger.debug(f"Raw LLM response (first 500 chars): {output[:500]}...")
@@ -87,7 +84,7 @@ def write_output(file_path, answer):
         json.dump(data, f, indent=2)
 
 
-async def main():
+def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(description="AIME agent for solving math problems")
     parser.add_argument("task_file", type=str, nargs="?", default="task.json", help="Path to a JSON file containing the AIME task (default: task.json)")
@@ -119,7 +116,7 @@ async def main():
         print(f"Loaded AIME problem from {task_file_path}")
         print("-" * 40)
 
-        answer = await solve_aime_problem(agent, problem_text)
+        answer = solve_aime_problem(agent, problem_text)
 
         output_file = Path("output.json")
         if answer is not None:
@@ -149,4 +146,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
