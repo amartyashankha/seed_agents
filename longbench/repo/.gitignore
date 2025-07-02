@@ -3,8 +3,8 @@ inputs/
 outputs/
 
 # Task files
-task.json
-*.json
+inputs/
+outputs/
 
 # Python
 __pycache__/
