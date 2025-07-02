@@ -41,9 +41,7 @@ def evaluate_predictions(predictions, ground_truth):
     return score
 
 
-async def run_arc_agent_example():
-    """Demonstrate the ARC agent by extracting a task, running it, and evaluating the output."""
-
+def load_arc_benchmark():
     print("ARC Agent Example - Task Injection & Evaluation")
     print("=" * 60)
 
@@ -55,13 +53,22 @@ async def run_arc_agent_example():
         print("Error: No training tasks found in benchmark.")
         return
 
-    task_id = train_ids[0]
+    return train_ids, benchmark
+
+
+def get_task_info(benchmark, task_id):
     print(f"   - Selected task: {task_id}")
 
     # 2. Prepare and save the task file for the agent
     task_info = benchmark.get_task_info(task_id)
     ground_truth_outputs = task_info["test_outputs"]
     demo_pairs = benchmark.get_demonstration_pairs(task_id)
+
+    return task_info, ground_truth_outputs, demo_pairs
+
+
+async def run_arc_agent(task_info, ground_truth_outputs, demo_pairs):
+    """Demonstrate the ARC agent by extracting a task, running it, and evaluating the output."""
 
     task_for_agent = {
         "train": demo_pairs,
