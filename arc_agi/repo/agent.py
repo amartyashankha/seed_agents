@@ -7,7 +7,7 @@ from agents import Agent
 # Simple ARC solver agent
 arc_agent = Agent(
     name="arc_solver",
-    model="o3-mini",
+    model="4.1-mini",
     instructions="""You are a top-tier ARC-AGI solver. Your goal is to analyze abstract puzzles and output the solution grid.
 
 Analyze the demonstration pairs to find the transformation rule. Apply that rule to the test inputs.
