@@ -20,22 +20,20 @@ export OPENAI_API_KEY="your-api-key-here"
 
 ## Usage
 
-The agent expects a JSON file with the problem text:
+The agent now accepts the task string directly as a command-line argument:
 
 ```bash
-python main.py task.json
+python main.py "Use the numbers 2, 3, 8, 8 to make 24"
 ```
 
-The JSON file should have this format:
-```json
-{
-  "task_input": "Use the numbers 2, 3, 8, 8 to make 24"
-}
+You can also specify a custom output file:
+```bash
+python main.py "Use the numbers 2, 3, 8, 8 to make 24" -o solution.json
 ```
 
 ## Output
 
-The agent writes its solution to `output.json`:
+The agent writes its solution to `output.json` (or the specified output file):
 ```json
 {
   "answer": "8 ÷ (3 - 8 ÷ 3)"

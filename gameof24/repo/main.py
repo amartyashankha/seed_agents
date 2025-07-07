@@ -88,43 +88,33 @@ def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(description="GameOf24 agent for solving puzzles")
     parser.add_argument(
-        "task_file",
+        "task",
         type=str,
-        nargs="?",
-        default="task.json",
-        help="Path to a JSON file containing the GameOf24 task (default: task.json)",
+        help="The GameOf24 task string (e.g., 'Use the numbers 2, 3, 8, 8 to make 24')",
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        type=str,
+        default="output.json",
+        help="Path to output JSON file (default: output.json)",
     )
     args = parser.parse_args()
 
     logger.info("--- GameOf24 Agent Run Started ---")
-    logger.info(f"Processing task file: {args.task_file}")
+    logger.info(f"Processing task: {args.task}")
 
     agent = get_gameof24_agent()
-    task_file_path = Path(args.task_file)
+    problem_text = args.task
 
     try:
-        # Read task from JSON file
-        with open(task_file_path) as f:
-            task_data = json.load(f)
-
-        # Extract problem text from task_input field
-        if "task_input" in task_data:
-            problem_text = task_data["task_input"]
-        else:
-            # Fallback to other possible field names
-            problem_text = task_data.get("problem", task_data.get("question", ""))
-
-        if not problem_text:
-            logger.error("No problem text found in task file")
-            sys.exit(1)
-
         logger.info(f"Loaded problem: {problem_text[:100]}...")
-        print(f"Loaded GameOf24 problem from {task_file_path}")
+        print(f"GameOf24 problem: {problem_text}")
         print("-" * 40)
 
         answer = solve_gameof24_problem(agent, problem_text)
 
-        output_file = Path("output.json")
+        output_file = Path(args.output)
         if answer is not None:
             write_output(output_file, answer)
             print(f"\nAgent solution: {answer}")
@@ -135,14 +125,6 @@ def main():
             # Write null answer
             write_output(output_file, None)
 
-    except FileNotFoundError:
-        logger.error(f"Task file not found: {task_file_path}")
-        print(f"Error: Task file not found at '{task_file_path}'")
-        sys.exit(1)
-    except json.JSONDecodeError as e:
-        logger.error(f"Invalid JSON in task file: {e}")
-        print(f"Error: Invalid JSON in task file: {e}")
-        sys.exit(1)
     except Exception as e:
         logger.error(f"An unexpected error occurred: {e}", exc_info=True)
         print(f"An unexpected error occurred: {e}")
