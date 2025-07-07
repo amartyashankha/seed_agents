@@ -37,15 +37,15 @@ Rules:
 
 Output format:
 - Show your solution as a clear mathematical expression
-- State your final answer as "[expression] = 24"
-- If no solution exists, state "No solution exists for these numbers"
+- State your final answer as <solution>[expression] = 24</solution>
+- If no solution exists, state <solution>No solution exists for these numbers</solution>
 """
 
         def solve(self, problem):
             """Solve a GameOf24 problem and return the answer."""
             try:
                 response = self.client.chat.completions.create(
-                    model="gpt-4",
+                    model="gpt-4.1",
                     messages=[
                         {"role": "system", "content": self.system_prompt},
                         {"role": "user", "content": problem},

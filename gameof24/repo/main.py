@@ -63,7 +63,7 @@ def solve_gameof24_problem(agent, problem_text):
     output = agent.solve(problem_text)
     logger.info("Agent returned a response.")
     logger.info(f"Raw LLM response length: {len(output)} characters")
-    logger.debug(f"Raw LLM response (first 500 chars): {output[:500]}...")
+    logger.info(f"Raw LLM response (first 500 chars): {output[:500]}...")
 
     # Extract the solution expression
     answer = extract_answer(output)
