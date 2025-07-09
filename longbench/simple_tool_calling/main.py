@@ -46,7 +46,7 @@ def main():
         print("-" * 40)
 
         # Solve the task
-        predicted_answer = solve_longbench_task(question=task["question"], context=task["context"], choices=task["choices"])
+        predicted_answer = solve_longbench_task(question=task["question"], context_str=task["context"], choices=task["choices"])
 
         # Write output
         output_dir = output_file_path.parent

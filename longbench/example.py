@@ -4,7 +4,7 @@ Example script showing how to use the LongBench agent on real benchmark tasks.
 This script demonstrates running multiple LongBench tasks in parallel by:
 1. Loading tasks from the LongBench benchmark
 2. Sampling k random tasks
-3. Running the agent on multiple tasks in parallel
+3. Running the agent on multiple tasks in parallel using asyncio.gather
 4. Evaluating the results
 """
 
@@ -18,6 +18,7 @@ from pathlib import Path
 
 from benchmarks.benchmarks.longbench.longbench_benchmark import LongBenchBenchmark
 from benchmarks.core.base_benchmark import Split
+from multi_agent.genes.seed_agents.longbench.simple_tool_calling.agent import solve_longbench_task
 
 
 async def run_agent_on_task(script_dir: Path, task_id: str, show_output: bool = True) -> dict:
@@ -63,14 +64,11 @@ async def run_agent_on_task(script_dir: Path, task_id: str, show_output: bool = 
 
 async def run_simple_tool_calling_agent_on_task(task_id: str, task_data: dict, show_output: bool = True) -> dict:
     """Run the simple tool calling agent on a single task asynchronously."""
-    print(f"   Starting task {task_id} with simple tool calling agent...")
+    if show_output:
+        print(f"   Starting task {task_id}...")
 
     try:
-        # Import the simple tool calling agent
-        sys.path.insert(0, str(Path(__file__).parent / "simple_tool_calling"))
-        from agent import solve_longbench_task
-
-        # Run the agent
+        # Run the agent directly using the imported function
         predicted_answer = await solve_longbench_task(question=task_data["question"], context_str=task_data["context"], choices=task_data.get("choices", []))
 
         result = {
@@ -80,16 +78,13 @@ async def run_simple_tool_calling_agent_on_task(task_id: str, task_data: dict, s
             "return_code": 0,
         }
 
-        if show_output:
-            print(f"   Task {task_id} completed successfully")
-            print(f"   Predicted answer: {predicted_answer}")
-
     except Exception as e:
         result = {"task_id": task_id, "success": False, "predicted_answer": None, "return_code": 1, "error": str(e)}
         if show_output:
             print(f"   Task {task_id} failed with error: {e}")
 
-    print(f"   Completed task {task_id} (success: {result['success']})")
+    if show_output:
+        print(f"   Completed task {task_id} (success: {result['success']})")
     return result
 
 
@@ -147,7 +142,7 @@ async def run_parallel_evaluation(limit: int = 5, sequential: bool = False, use_
         tasks_data[task_id] = {"benchmark_task": task_info}
 
     if use_simple_tool_calling:
-        print("   Using simple tool calling agent (no file preparation needed)")
+        print("   Using simple tool calling agent (async parallelism)")
     else:
         script_dir = Path(__file__).parent / "repo"
         inputs_dir = script_dir / "inputs"
@@ -174,11 +169,10 @@ async def run_parallel_evaluation(limit: int = 5, sequential: bool = False, use_
                 result = await run_simple_tool_calling_agent_on_task(task_id, task_info, show_output=True)
                 results.append(result)
         else:
-            # Create tasks for async execution
+            # Use asyncio.gather for maximum parallelization
             agent_tasks = [
                 run_simple_tool_calling_agent_on_task(task_id, tasks_data[task_id]["benchmark_task"], show_output=True) for task_id in selected_task_ids
             ]
-            # Run all tasks in parallel
             results = await asyncio.gather(*agent_tasks, return_exceptions=True)
     else:
         script_dir = Path(__file__).parent / "repo"
@@ -189,16 +183,26 @@ async def run_parallel_evaluation(limit: int = 5, sequential: bool = False, use_
                 result = await run_agent_on_task(script_dir, task_id, show_output=True)
                 results.append(result)
         else:
-            # Create tasks for async execution
+            # Use asyncio.gather for maximum parallelization
             agent_tasks = [run_agent_on_task(script_dir, task_id, show_output=True) for task_id in selected_task_ids]
-            # Run all tasks in parallel
             results = await asyncio.gather(*agent_tasks, return_exceptions=True)
 
     end_time = time.time()
     total_time = end_time - start_time
 
-    print(f"   Completed {len(results)} tasks in {total_time:.2f} seconds")
-    print(f"   Average time per task: {total_time / len(results):.2f} seconds")
+    # Filter out exceptions and convert them to error results
+    processed_results = []
+    for i, result in enumerate(results):
+        if isinstance(result, Exception):
+            processed_results.append({"task_id": selected_task_ids[i], "success": False, "predicted_answer": None, "return_code": 1, "error": str(result)})
+        else:
+            processed_results.append(result)
+
+    results = processed_results
+
+    print(f"\n   Completed {len(results)} tasks in {total_time:.2f} seconds")
+    if results:
+        print(f"   Average time per task: {total_time / len(results):.2f} seconds")
 
     # 4. Evaluate results
     print("\n4. Evaluating results...")
@@ -207,18 +211,12 @@ async def run_parallel_evaluation(limit: int = 5, sequential: bool = False, use_
     failed_tasks = []
 
     for result in results:
-        if isinstance(result, Exception):
-            print(f"   Exception for task: {result}")
-            continue
+        task_id = result.get("task_id")
+        success = result.get("success")
+        predicted = result.get("predicted_answer")
 
-        # Type check to ensure result is a dict
-        if not isinstance(result, dict):
-            print(f"   Invalid result type: {type(result)}")
+        if not task_id:
             continue
-
-        task_id = result["task_id"]
-        success = result["success"]
-        predicted = result["predicted_answer"]
 
         if success:
             successful_count += 1
@@ -238,7 +236,7 @@ async def run_parallel_evaluation(limit: int = 5, sequential: bool = False, use_
                 print(f"   ✗ {task_id}: {predicted} (expected {expected})")
         else:
             failed_tasks.append(task_id)
-            print(f"   ✗ {task_id}: FAILED")
+            print(f"   ✗ {task_id}: FAILED - {result.get('error')}")
 
     # 5. Summary
     print("\n5. Summary:")
@@ -252,29 +250,6 @@ async def run_parallel_evaluation(limit: int = 5, sequential: bool = False, use_
 
     if failed_tasks:
         print(f"\n   Failed tasks: {failed_tasks}")
-
-    # Show some example results
-    print("\n6. Example results:")
-    for i, result in enumerate(results[:3]):  # Show first 3 results
-        if isinstance(result, Exception):
-            continue
-
-        # Type check to ensure result is a dict
-        if not isinstance(result, dict):
-            continue
-
-        task_id = result["task_id"]
-        if result["success"]:
-            task_info = tasks_data[task_id]["benchmark_task"]
-            print(f"\n   Task {i + 1} ({task_id}):")
-            print(f"   Domain: {task_info['domain']}")
-            print(f"   Question: {task_info['question'][:100]}...")
-            print(f"   Predicted: {result['predicted_answer']}")
-            if use_simple_tool_calling:
-                expected = tasks_data[task_id]["benchmark_task"]["correct_answer_letter"]
-            else:
-                expected = tasks_data[task_id]["agent_task"]["answer"]
-            print(f"   Expected: {expected}")
 
     print("\n" + "=" * 60)
     print("Parallel evaluation complete!")
