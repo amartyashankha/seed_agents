@@ -61,6 +61,38 @@ async def run_agent_on_task(script_dir: Path, task_id: str, show_output: bool = 
     return result
 
 
+async def run_simple_tool_calling_agent_on_task(task_id: str, task_data: dict, show_output: bool = True) -> dict:
+    """Run the simple tool calling agent on a single task asynchronously."""
+    print(f"   Starting task {task_id} with simple tool calling agent...")
+
+    try:
+        # Import the simple tool calling agent
+        sys.path.insert(0, str(Path(__file__).parent / "simple_tool_calling"))
+        from agent import solve_longbench_task
+
+        # Run the agent
+        predicted_answer = await solve_longbench_task(question=task_data["question"], context_str=task_data["context"], choices=task_data.get("choices", []))
+
+        result = {
+            "task_id": task_id,
+            "success": True,
+            "predicted_answer": predicted_answer,
+            "return_code": 0,
+        }
+
+        if show_output:
+            print(f"   Task {task_id} completed successfully")
+            print(f"   Predicted answer: {predicted_answer}")
+
+    except Exception as e:
+        result = {"task_id": task_id, "success": False, "predicted_answer": None, "return_code": 1, "error": str(e)}
+        if show_output:
+            print(f"   Task {task_id} failed with error: {e}")
+
+    print(f"   Completed task {task_id} (success: {result['success']})")
+    return result
+
+
 def save_task_to_file(task_data: dict, task_id: str, inputs_dir: Path):
     """Save a task to the inputs directory."""
     task_file = inputs_dir / f"{task_id}.json"
@@ -84,9 +116,10 @@ def save_task_to_file(task_data: dict, task_id: str, inputs_dir: Path):
     return agent_task
 
 
-async def run_parallel_evaluation(limit: int = 5, sequential: bool = False):
+async def run_parallel_evaluation(limit: int = 5, sequential: bool = False, use_simple_tool_calling: bool = False):
     """Run parallel evaluation on LongBench tasks."""
-    print(f"LongBench Parallel Agent Evaluation (limit={limit})")
+    agent_type = "Simple Tool Calling" if use_simple_tool_calling else "Default Repo"
+    print(f"LongBench Parallel Agent Evaluation ({agent_type}) (limit={limit})")
     print("=" * 60)
 
     # 1. Load benchmark and sample tasks
@@ -107,34 +140,59 @@ async def run_parallel_evaluation(limit: int = 5, sequential: bool = False):
 
     # 2. Prepare task files
     print("\n2. Preparing task files...")
-    script_dir = Path(__file__).parent / "repo"
-    inputs_dir = script_dir / "inputs"
-    inputs_dir.mkdir(exist_ok=True)
 
     tasks_data = {}
     for task_id in selected_task_ids:
         task_info = benchmark.get_task_info(task_id)
-        agent_task = save_task_to_file(task_info, task_id, inputs_dir)
-        tasks_data[task_id] = {"agent_task": agent_task, "benchmark_task": task_info}
+        tasks_data[task_id] = {"benchmark_task": task_info}
 
-    print(f"   Saved {len(tasks_data)} task files to {inputs_dir}")
+    if use_simple_tool_calling:
+        print("   Using simple tool calling agent (no file preparation needed)")
+    else:
+        script_dir = Path(__file__).parent / "repo"
+        inputs_dir = script_dir / "inputs"
+        inputs_dir.mkdir(exist_ok=True)
+
+        for task_id in selected_task_ids:
+            task_info = tasks_data[task_id]["benchmark_task"]
+            agent_task = save_task_to_file(task_info, task_id, inputs_dir)
+            tasks_data[task_id]["agent_task"] = agent_task
+
+        print(f"   Saved {len(tasks_data)} task files to {inputs_dir}")
 
     # 3. Run agents
     mode = "sequentially" if sequential else "in parallel"
-    print(f"\n3. Running agents {mode}...")
+    print(f"\n3. Running {agent_type} agents {mode}...")
     start_time = time.time()
 
-    if sequential:
-        # Run tasks one by one for easier debugging
-        results = []
-        for task_id in selected_task_ids:
-            result = await run_agent_on_task(script_dir, task_id, show_output=True)
-            results.append(result)
+    if use_simple_tool_calling:
+        if sequential:
+            # Run tasks one by one for easier debugging
+            results = []
+            for task_id in selected_task_ids:
+                task_info = tasks_data[task_id]["benchmark_task"]
+                result = await run_simple_tool_calling_agent_on_task(task_id, task_info, show_output=True)
+                results.append(result)
+        else:
+            # Create tasks for async execution
+            agent_tasks = [
+                run_simple_tool_calling_agent_on_task(task_id, tasks_data[task_id]["benchmark_task"], show_output=True) for task_id in selected_task_ids
+            ]
+            # Run all tasks in parallel
+            results = await asyncio.gather(*agent_tasks, return_exceptions=True)
     else:
-        # Create tasks for async execution
-        agent_tasks = [run_agent_on_task(script_dir, task_id, show_output=True) for task_id in selected_task_ids]
-        # Run all tasks in parallel
-        results = await asyncio.gather(*agent_tasks, return_exceptions=True)
+        script_dir = Path(__file__).parent / "repo"
+        if sequential:
+            # Run tasks one by one for easier debugging
+            results = []
+            for task_id in selected_task_ids:
+                result = await run_agent_on_task(script_dir, task_id, show_output=True)
+                results.append(result)
+        else:
+            # Create tasks for async execution
+            agent_tasks = [run_agent_on_task(script_dir, task_id, show_output=True) for task_id in selected_task_ids]
+            # Run all tasks in parallel
+            results = await asyncio.gather(*agent_tasks, return_exceptions=True)
 
     end_time = time.time()
     total_time = end_time - start_time
@@ -164,7 +222,10 @@ async def run_parallel_evaluation(limit: int = 5, sequential: bool = False):
 
         if success:
             successful_count += 1
-            expected = tasks_data[task_id]["agent_task"]["answer"]
+            if use_simple_tool_calling:
+                expected = tasks_data[task_id]["benchmark_task"]["correct_answer_letter"]
+            else:
+                expected = tasks_data[task_id]["agent_task"]["answer"]
 
             # Evaluate using benchmark
             eval_result = benchmark.evaluate(task_id, predicted)
@@ -181,6 +242,7 @@ async def run_parallel_evaluation(limit: int = 5, sequential: bool = False):
 
     # 5. Summary
     print("\n5. Summary:")
+    print(f"   Agent type: {agent_type}")
     print(f"   Total tasks: {len(results)}")
     print(f"   Successful: {successful_count}")
     print(f"   Failed: {len(failed_tasks)}")
@@ -208,7 +270,11 @@ async def run_parallel_evaluation(limit: int = 5, sequential: bool = False):
             print(f"   Domain: {task_info['domain']}")
             print(f"   Question: {task_info['question'][:100]}...")
             print(f"   Predicted: {result['predicted_answer']}")
-            print(f"   Expected: {tasks_data[task_id]['agent_task']['answer']}")
+            if use_simple_tool_calling:
+                expected = tasks_data[task_id]["benchmark_task"]["correct_answer_letter"]
+            else:
+                expected = tasks_data[task_id]["agent_task"]["answer"]
+            print(f"   Expected: {expected}")
 
     print("\n" + "=" * 60)
     print("Parallel evaluation complete!")
@@ -219,10 +285,11 @@ def main():
     parser = argparse.ArgumentParser(description="Run LongBench agent on multiple tasks in parallel")
     parser.add_argument("--limit", type=int, default=5, help="Number of tasks to run (default: 5)")
     parser.add_argument("--sequential", action="store_true", help="Run tasks sequentially instead of in parallel (for debugging)")
+    parser.add_argument("--simple-tool-calling", action="store_true", help="Use the simple tool calling agent instead of the default repo agent")
     args = parser.parse_args()
 
     # Run the async evaluation
-    asyncio.run(run_parallel_evaluation(args.limit, args.sequential))
+    asyncio.run(run_parallel_evaluation(args.limit, args.sequential, args.simple_tool_calling))
 
 
 if __name__ == "__main__":

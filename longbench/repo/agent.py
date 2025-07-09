@@ -11,8 +11,8 @@ from llm_ops import answer_question, compress_context, process_chunk_with_contex
 logger = logging.getLogger(__name__)
 
 # Configuration
-CHUNK_SIZE = 1000000  # Size of each chunk to process
-CONTEXT_SIZE = 500000  # Maximum maintained context size
+CHUNK_SIZE = 10000000  # Size of each chunk to process
+CONTEXT_SIZE = 5000000  # Maximum maintained context size
 
 
 def solve_longbench_task(question: str, context: str, choices: list[str]) -> str:
